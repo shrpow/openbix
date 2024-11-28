@@ -1,0 +1,20 @@
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Upload Code To Server
+      uses: appleboy/ssh-action@v1.1.0
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 22
+        script: cd ~ && if cd farmbix; then git pull; else git clone https://${{ secrets.PAT }}@github.com/${{ github.repository }} && cd farmbix;  fi && docker compose up -d --build

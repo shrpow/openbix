@@ -1,0 +1,5 @@
+:80 {
+    handle /* {
+        reverse_proxy farmbix_grafana:3000
+    }
+}

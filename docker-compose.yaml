@@ -1,0 +1,98 @@
+networks:
+  farmbix:
+    name: farmbix_network
+
+services:
+  prometheus:
+    container_name: farmbix_prometheus
+    hostname: farmbix_prometheus
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Moscow"
+    networks:
+      - farmbix
+
+  grafana:
+    container_name: farmbix_grafana
+    hostname: farmbix_grafana
+    image: grafana/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Moscow"
+    networks:
+      - farmbix
+    volumes:
+      - grafana_storage:/var/lib/grafana
+
+  caddy:
+    depends_on: 
+      - grafana
+    container_name: farmbix_caddy
+    hostname: farmbix_caddy
+    image: caddy
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    ports:
+      - "8080:80"
+    networks:
+      - farmbix
+
+  mongodb:
+    container_name: farmbix_mongo
+    hostname: farmbix_mongo
+    image: mongo
+    restart: unless-stopped
+    volumes:
+      - ./mongo:/data/db
+    networks:
+      - farmbix
+
+  backend:
+    depends_on:
+      - mongodb
+    container_name: farmbix_backend
+    hostname: farmbix_backend
+    image: farmbix_backend:latest
+    restart: unless-stopped
+    env_file: backend/.env
+    environment:
+      - FBX_DB_CONNECTION_STRING=mongodb://farmbix_mongo:27017/farmbix
+      - FBX_EMQ_WORKER_BALANCER_INPUT_ADDRESS=tcp://farmbix_backend:5560
+      - FBX_EMQ_WORKER_BALANCER_OUTPUT_ADDRESS=tcp://farmbix_backend:5561
+      - FBX_EMQ_WORKER_MESSAGE_BUS_ADDRESS=tcp://farmbix_backend:5559
+    build:
+      context: backend/
+    networks:
+      - farmbix
+
+  worker:
+    depends_on: 
+      - backend
+    hostname: farmbix_worker
+    image: farmbix_worker:latest
+    restart: unless-stopped
+    env_file: worker/.env
+    environment:
+      - FBX_EMQ_WORKER_BALANCER_OUTPUT_ADDRESS=tcp://farmbix_backend:5561
+      - FBX_EMQ_WORKER_MESSAGE_BUS_ADDRESS=tcp://farmbix_backend:5559
+    build:
+      context: worker/
+    deploy:
+      mode: replicated
+      replicas: 4
+      endpoint_mode: vip
+    networks:
+      - farmbix
+
+volumes:
+  grafana_storage: {}
